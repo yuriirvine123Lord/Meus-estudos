@@ -1,0 +1,55 @@
+name: Release Desktop App
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install web deps
+        working-directory: apps/web
+        run: bun install
+
+      - name: Build web
+        working-directory: apps/web
+        env:
+          VITE_OPENAI_API_KEY: ${{ secrets.VITE_OPENAI_API_KEY }}
+        run: bun run build
+
+      - name: Copy web build to electron
+        shell: bash
+        run: |
+          mkdir -p apps/electron/dist
+          cp -r apps/web/dist/client/* apps/electron/dist/ 2>/dev/null || cp -r apps/web/dist/* apps/electron/dist/
+
+      - name: Install electron deps
+        working-directory: apps/electron
+        run: npm install
+
+      - name: Build installer
+        working-directory: apps/electron
+        run: npm run build
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apps/electron/release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
