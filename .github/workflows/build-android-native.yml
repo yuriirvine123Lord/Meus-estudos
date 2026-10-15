@@ -1,0 +1,48 @@
+name: Build Android APK (Native)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: '8.9'
+
+      - name: Generate release keystore
+        run: |
+          keytool -genkeypair -v -keystore release.keystore -alias opencut \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass opencut123 -keypass opencut123 \
+            -dname "CN=OpenCut, OU=OpenCut, O=OpenCut, L=SP, ST=SP, C=BR"
+
+      - name: Build APK (release)
+        working-directory: apps/android
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/release.keystore
+          KEYSTORE_PASSWORD: opencut123
+          KEY_ALIAS: opencut
+          KEY_PASSWORD: opencut123
+        run: gradle assembleRelease --no-daemon
+
+      - name: Upload APK to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apps/android/app/build/outputs/apk/release/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
